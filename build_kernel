@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -e
+
+case $1 in
+	mini6410)
+		name=$1
+		out=$(pwd)/out/${name}
+		shift 1
+		;;
+	*)
+		name=mini6410
+		out=$(pwd)/out/${name}
+		;;
+esac
+
+action=$1
+mkdir -p ${out}
+test ! -e ${out}/.config && cp -vf $(pwd)/arch/arm/configs/${name}_defconfig ${out}/.config
+
+echo "making ${action} for ${name}"
+
+make ARCH=arm CROSS_COMPILE=arm-unknown-linux-gnueabi- -j2 O=${out} ${action}
+
+# copy images
+images="zImage uImage"
+
+for image in ${images}; do
+	test -e ${out}/arch/arm/boot/${image} && cp -vf ${out}/arch/arm/boot/${image} /tmp
+done

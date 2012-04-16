@@ -42,6 +42,7 @@
 #include <plat/regs-serial.h>
 #include <plat/ts.h>
 #include <plat/regs-fb-v4.h>
+#include <plat/sdhci.h>
 
 #include <video/platform_lcd.h>
 
@@ -296,6 +297,15 @@ static void mini6410_parse_features(
 	}
 }
 
+static struct s3c_sdhci_platdata sdhci0_pdata = {
+	.cd_type		= S3C_SDHCI_CD_INTERNAL,
+};
+
+static struct s3c_sdhci_platdata sdhci1_pdata = {
+	.cd_type		= S3C_SDHCI_CD_GPIO,
+	.ext_cd_gpio	= S3C64XX_GPN(10),
+};
+
 static void __init mini6410_machine_init(void)
 {
 	u32 cs1;
@@ -316,6 +326,8 @@ static void __init mini6410_machine_init(void)
 	s3c_nand_set_platdata(&mini6410_nand_info);
 	s3c_fb_set_platdata(&mini6410_lcd_pdata);
 	s3c24xx_ts_set_platdata(NULL);
+	s3c_sdhci0_set_platdata(&sdhci0_pdata);
+	s3c_sdhci1_set_platdata(&sdhci1_pdata);
 
 	/* configure nCS1 width to 16 bits */
 

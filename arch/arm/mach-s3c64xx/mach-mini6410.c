@@ -43,6 +43,7 @@
 #include <plat/ts.h>
 #include <plat/regs-fb-v4.h>
 #include <plat/sdhci.h>
+#include <plat/udc-hs.h>
 
 #include <video/platform_lcd.h>
 
@@ -213,6 +214,7 @@ static struct platform_device *mini6410_devices[] __initdata = {
 	&s3c_device_hsmmc0,
 	&s3c_device_hsmmc1,
 	&s3c_device_ohci,
+	&s3c_device_usb_hsotg,
 	&s3c_device_nand,
 	&s3c_device_fb,
 	&mini6410_lcd_powerdev,
@@ -306,6 +308,8 @@ static struct s3c_sdhci_platdata sdhci1_pdata = {
 	.ext_cd_gpio	= S3C64XX_GPN(10),
 };
 
+static struct s3c_hsotg_plat mini6410_hsotg_pdata;
+
 static void __init mini6410_machine_init(void)
 {
 	u32 cs1;
@@ -328,6 +332,7 @@ static void __init mini6410_machine_init(void)
 	s3c24xx_ts_set_platdata(NULL);
 	s3c_sdhci0_set_platdata(&sdhci0_pdata);
 	s3c_sdhci1_set_platdata(&sdhci1_pdata);
+	s3c_hsotg_set_platdata(&mini6410_hsotg_pdata);
 
 	/* configure nCS1 width to 16 bits */
 

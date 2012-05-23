@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/gfp.h>
+#include <linux/cpu.h>
 #include <asm/ctl_reg.h>
 
 /*
@@ -61,21 +62,14 @@ long probe_kernel_write(void *dst, const void *src, size_t size)
 	return copied < 0 ? -EFAULT : 0;
 }
 
-/*
- * Copy memory in real mode (kernel to kernel)
- */
-int memcpy_real(void *dest, void *src, size_t count)
+static int __memcpy_real(void *dest, void *src, size_t count)
 {
 	register unsigned long _dest asm("2") = (unsigned long) dest;
 	register unsigned long _len1 asm("3") = (unsigned long) count;
 	register unsigned long _src  asm("4") = (unsigned long) src;
 	register unsigned long _len2 asm("5") = (unsigned long) count;
-	unsigned long flags;
 	int rc = -EFAULT;
 
-	if (!count)
-		return 0;
-	flags = __arch_local_irq_stnsm(0xf8UL);
 	asm volatile (
 		"0:	mvcle	%1,%2,0x0\n"
 		"1:	jo	0b\n"
@@ -86,7 +80,23 @@ int memcpy_real(void *dest, void *src, size_t count)
 		  "+d" (_len2), "=m" (*((long *) dest))
 		: "m" (*((long *) src))
 		: "cc", "memory");
-	arch_local_irq_restore(flags);
+	return rc;
+}
+
+/*
+ * Copy memory in real mode (kernel to kernel)
+ */
+int memcpy_real(void *dest, void *src, size_t count)
+{
+	unsigned long flags;
+	int rc;
+
+	if (!count)
+		return 0;
+	local_irq_save(flags);
+	__arch_local_irq_stnsm(0xfbUL);
+	rc = __memcpy_real(dest, src, count);
+	local_irq_restore(flags);
 	return rc;
 }
 
@@ -156,4 +166,70 @@ int copy_from_user_real(void *dest, void __user *src, size_t count)
 out:
 	free_page((unsigned long) buf);
 	return rc;
+}
+
+/*
+ * Check if physical address is within prefix or zero page
+ */
+static int is_swapped(unsigned long addr)
+{
+	unsigned long lc;
+	int cpu;
+
+	if (addr < sizeof(struct _lowcore))
+		return 1;
+	for_each_online_cpu(cpu) {
+		lc = (unsigned long) lowcore_ptr[cpu];
+		if (addr > lc + sizeof(struct _lowcore) - 1 || addr < lc)
+			continue;
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * Return swapped prefix or zero page address
+ */
+static unsigned long get_swapped(unsigned long addr)
+{
+	unsigned long prefix = store_prefix();
+
+	if (addr < sizeof(struct _lowcore))
+		return addr + prefix;
+	if (addr >= prefix && addr < prefix + sizeof(struct _lowcore))
+		return addr - prefix;
+	return addr;
+}
+
+/*
+ * Convert a physical pointer for /dev/mem access
+ *
+ * For swapped prefix pages a new buffer is returned that contains a copy of
+ * the absolute memory. The buffer size is maximum one page large.
+ */
+void *xlate_dev_mem_ptr(unsigned long addr)
+{
+	void *bounce = (void *) addr;
+	unsigned long size;
+
+	get_online_cpus();
+	preempt_disable();
+	if (is_swapped(addr)) {
+		size = PAGE_SIZE - (addr & ~PAGE_MASK);
+		bounce = (void *) __get_free_page(GFP_ATOMIC);
+		if (bounce)
+			memcpy_real(bounce, (void *) get_swapped(addr), size);
+	}
+	preempt_enable();
+	put_online_cpus();
+	return bounce;
+}
+
+/*
+ * Free converted buffer for /dev/mem access (if necessary)
+ */
+void unxlate_dev_mem_ptr(unsigned long addr, void *buf)
+{
+	if ((void *) addr != buf)
+		free_page((unsigned long) buf);
 }

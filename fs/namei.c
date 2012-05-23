@@ -116,47 +116,37 @@
  * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
  * PATH_MAX includes the nul terminator --RR.
  */
-static int do_getname(const char __user *filename, char *page)
-{
-	int retval;
-	unsigned long len = PATH_MAX;
-
-	if (!segment_eq(get_fs(), KERNEL_DS)) {
-		if ((unsigned long) filename >= TASK_SIZE)
-			return -EFAULT;
-		if (TASK_SIZE - (unsigned long) filename < PATH_MAX)
-			len = TASK_SIZE - (unsigned long) filename;
-	}
-
-	retval = strncpy_from_user(page, filename, len);
-	if (retval > 0) {
-		if (retval < len)
-			return 0;
-		return -ENAMETOOLONG;
-	} else if (!retval)
-		retval = -ENOENT;
-	return retval;
-}
-
 static char *getname_flags(const char __user *filename, int flags, int *empty)
 {
-	char *result = __getname();
-	int retval;
+	char *result = __getname(), *err;
+	int len;
 
-	if (!result)
+	if (unlikely(!result))
 		return ERR_PTR(-ENOMEM);
 
-	retval = do_getname(filename, result);
-	if (retval < 0) {
-		if (retval == -ENOENT && empty)
+	len = strncpy_from_user(result, filename, PATH_MAX);
+	err = ERR_PTR(len);
+	if (unlikely(len < 0))
+		goto error;
+
+	/* The empty path is special. */
+	if (unlikely(!len)) {
+		if (empty)
 			*empty = 1;
-		if (retval != -ENOENT || !(flags & LOOKUP_EMPTY)) {
-			__putname(result);
-			return ERR_PTR(retval);
-		}
+		err = ERR_PTR(-ENOENT);
+		if (!(flags & LOOKUP_EMPTY))
+			goto error;
 	}
-	audit_getname(result);
-	return result;
+
+	err = ERR_PTR(-ENAMETOOLONG);
+	if (likely(len < PATH_MAX)) {
+		audit_getname(result);
+		return result;
+	}
+
+error:
+	__putname(result);
+	return err;
 }
 
 char *getname(const char __user * filename)
@@ -1154,12 +1144,25 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	 */
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
-		*inode = nd->inode;
-		dentry = __d_lookup_rcu(parent, name, &seq, inode);
+		dentry = __d_lookup_rcu(parent, name, &seq, nd->inode);
 		if (!dentry)
 			goto unlazy;
 
-		/* Memory barrier in read_seqcount_begin of child is enough */
+		/*
+		 * This sequence count validates that the inode matches
+		 * the dentry name information from lookup.
+		 */
+		*inode = dentry->d_inode;
+		if (read_seqcount_retry(&dentry->d_seq, seq))
+			return -ECHILD;
+
+		/*
+		 * This sequence count validates that the parent had no
+		 * changes while we did the lookup of the dentry above.
+		 *
+		 * The memory barrier in read_seqcount_begin of child is
+		 *  enough, we can use __read_seqcount_retry here.
+		 */
 		if (__read_seqcount_retry(&parent->d_seq, nd->seq))
 			return -ECHILD;
 		nd->seq = seq;
@@ -1429,7 +1432,7 @@ unsigned int full_name_hash(const unsigned char *name, unsigned int len)
 	unsigned long hash = 0;
 
 	for (;;) {
-		a = *(unsigned long *)name;
+		a = load_unaligned_zeropad(name);
 		if (len < sizeof(unsigned long))
 			break;
 		hash += a;
@@ -1459,7 +1462,7 @@ static inline unsigned long hash_name(const char *name, unsigned int *hashp)
 	do {
 		hash = (hash + a) * 9;
 		len += sizeof(unsigned long);
-		a = *(unsigned long *)(name+len);
+		a = load_unaligned_zeropad(name+len);
 		/* Do we have any NUL or '/' bytes in this word? */
 		mask = has_zero(a) | has_zero(a ^ REPEAT_BYTE('/'));
 	} while (!mask);

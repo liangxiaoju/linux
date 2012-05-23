@@ -1059,12 +1059,9 @@ static const struct rpc_filelist files[] = {
 struct dentry *rpc_d_lookup_sb(const struct super_block *sb,
 			       const unsigned char *dir_name)
 {
-	struct qstr dir = {
-		.name = dir_name,
-		.len = strlen(dir_name),
-		.hash = full_name_hash(dir_name, strlen(dir_name)),
-	};
+	struct qstr dir = QSTR_INIT(dir_name, strlen(dir_name));
 
+	dir.hash = full_name_hash(dir.name, dir.len);
 	return d_lookup(sb->s_root, &dir);
 }
 EXPORT_SYMBOL_GPL(rpc_d_lookup_sb);
@@ -1126,19 +1123,20 @@ rpc_fill_super(struct super_block *sb, void *data, int silent)
 		return -ENOMEM;
 	dprintk("RPC:	sending pipefs MOUNT notification for net %p%s\n", net,
 								NET_NAME(net));
+	sn->pipefs_sb = sb;
 	err = blocking_notifier_call_chain(&rpc_pipefs_notifier_list,
 					   RPC_PIPEFS_MOUNT,
 					   sb);
 	if (err)
 		goto err_depopulate;
 	sb->s_fs_info = get_net(net);
-	sn->pipefs_sb = sb;
 	return 0;
 
 err_depopulate:
 	blocking_notifier_call_chain(&rpc_pipefs_notifier_list,
 					   RPC_PIPEFS_UMOUNT,
 					   sb);
+	sn->pipefs_sb = NULL;
 	__rpc_depopulate(root, files, RPCAUTH_lockd, RPCAUTH_RootEOF);
 	return err;
 }

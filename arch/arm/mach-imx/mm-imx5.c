@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/pinctrl/machine.h>
 
 #include <asm/system_misc.h>
 #include <asm/mach/map.h>
@@ -35,7 +36,7 @@ static void imx5_idle(void)
 	}
 	clk_enable(gpc_dvfs_clk);
 	mx5_cpu_lp_set(WAIT_UNCLOCKED_POWER_OFF);
-	if (tzic_enable_wake() != 0)
+	if (!tzic_enable_wake())
 		cpu_do_idle();
 	clk_disable(gpc_dvfs_clk);
 }
@@ -223,6 +224,7 @@ void __init imx53_soc_init(void)
 	mxc_register_gpio("imx31-gpio", 5, MX53_GPIO6_BASE_ADDR, SZ_16K, MX53_INT_GPIO6_LOW, MX53_INT_GPIO6_HIGH);
 	mxc_register_gpio("imx31-gpio", 6, MX53_GPIO7_BASE_ADDR, SZ_16K, MX53_INT_GPIO7_LOW, MX53_INT_GPIO7_HIGH);
 
+	pinctrl_provide_dummies();
 	/* i.mx53 has the i.mx35 type sdma */
 	imx_add_imx_sdma("imx35-sdma", MX53_SDMA_BASE_ADDR, MX53_INT_SDMA, &imx53_sdma_pdata);
 

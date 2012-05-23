@@ -26,6 +26,7 @@
 #include <linux/platform_device.h>
 #include <linux/jiffies.h>
 #include <linux/io.h>
+#include <linux/pinctrl/consumer.h>
 
 #include <mach/common.h>
 
@@ -227,6 +228,7 @@ static int mxs_i2c_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg,
 		return -EINVAL;
 
 	init_completion(&i2c->cmd_complete);
+	i2c->cmd_err = 0;
 
 	flags = stop ? MXS_I2C_CTRL0_POST_SEND_STOP : 0;
 
@@ -252,6 +254,9 @@ static int mxs_i2c_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg,
 
 	if (i2c->cmd_err == -ENXIO)
 		mxs_i2c_reset(i2c);
+	else
+		writel(MXS_I2C_QUEUECTRL_QUEUE_RUN,
+				i2c->regs + MXS_I2C_QUEUECTRL_CLR);
 
 	dev_dbg(i2c->dev, "Done with err=%d\n", i2c->cmd_err);
 
@@ -299,8 +304,6 @@ static irqreturn_t mxs_i2c_isr(int this_irq, void *dev_id)
 		    MXS_I2C_CTRL1_SLAVE_STOP_IRQ | MXS_I2C_CTRL1_SLAVE_IRQ))
 		/* MXS_I2C_CTRL1_OVERSIZE_XFER_TERM_IRQ is only for slaves */
 		i2c->cmd_err = -EIO;
-	else
-		i2c->cmd_err = 0;
 
 	is_last_cmd = (readl(i2c->regs + MXS_I2C_QUEUESTAT) &
 		MXS_I2C_QUEUESTAT_WRITE_QUEUE_CNT_MASK) == 0;
@@ -323,9 +326,14 @@ static int __devinit mxs_i2c_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct mxs_i2c_dev *i2c;
 	struct i2c_adapter *adap;
+	struct pinctrl *pinctrl;
 	struct resource *res;
 	resource_size_t res_size;
 	int err, irq;
+
+	pinctrl = devm_pinctrl_get_select_default(dev);
+	if (IS_ERR(pinctrl))
+		return PTR_ERR(pinctrl);
 
 	i2c = devm_kzalloc(dev, sizeof(struct mxs_i2c_dev), GFP_KERNEL);
 	if (!i2c)
@@ -384,8 +392,6 @@ static int __devexit mxs_i2c_remove(struct platform_device *pdev)
 	if (ret)
 		return -EBUSY;
 
-	writel(MXS_I2C_QUEUECTRL_QUEUE_RUN,
-			i2c->regs + MXS_I2C_QUEUECTRL_CLR);
 	writel(MXS_I2C_CTRL0_SFTRST, i2c->regs + MXS_I2C_CTRL0_SET);
 
 	platform_set_drvdata(pdev, NULL);

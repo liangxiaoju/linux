@@ -134,6 +134,9 @@ KBUILD_CFLAGS += $(call cc-option,-mno-avx,)
 KBUILD_CFLAGS += $(mflags-y)
 KBUILD_AFLAGS += $(mflags-y)
 
+archscripts:
+	$(Q)$(MAKE) $(build)=arch/x86/tools relocs
+
 ###
 # Syscall table generation
 
@@ -146,7 +149,6 @@ archheaders:
 head-y := arch/x86/kernel/head_$(BITS).o
 head-y += arch/x86/kernel/head$(BITS).o
 head-y += arch/x86/kernel/head.o
-head-y += arch/x86/kernel/init_task.o
 
 libs-y  += arch/x86/lib/
 

@@ -46,8 +46,8 @@
 #include <plat/ts.h>
 #include <plat/regs-fb-v4.h>
 #include <plat/sdhci.h>
-#include <plat/udc-hs.h>
 #include <plat/audio.h>
+#include <linux/platform_data/s3c-hsotg.h>
 
 #include <video/platform_lcd.h>
 

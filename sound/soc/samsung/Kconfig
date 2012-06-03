@@ -143,6 +143,14 @@ config SND_SOC_SAMSUNG_SMDK_WM9713
 	help
 	  Sat Y if you want to add support for SoC audio on the SMDK.
 
+config SND_SOC_SAMSUNG_MINI6410_WM9713
+	tristate "SoC AC97 Audio support for MINI6410 with WM9713"
+	depends on SND_SOC_SAMSUNG && MACH_MINI6410
+	select SND_SOC_WM9713
+	select SND_SAMSUNG_AC97
+	help
+	  Sat Y if you want to add support for SoC audio on the MINI6410.
+
 config SND_SOC_SMARTQ
 	tristate "SoC I2S Audio support for SmartQ board"
 	depends on SND_SOC_SAMSUNG && MACH_SMARTQ

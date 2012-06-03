@@ -23,6 +23,9 @@
 #include <linux/mtd/partitions.h>
 #include <linux/serial_core.h>
 #include <linux/types.h>
+#include <linux/input.h>
+#include <linux/gpio_keys.h>
+#include <linux/leds.h>
 
 #include <asm/hardware/vic.h>
 #include <asm/mach-types.h>
@@ -44,6 +47,7 @@
 #include <plat/regs-fb-v4.h>
 #include <plat/sdhci.h>
 #include <plat/udc-hs.h>
+#include <plat/audio.h>
 
 #include <video/platform_lcd.h>
 
@@ -209,6 +213,69 @@ static struct platform_device mini6410_lcd_powerdev = {
 	.dev.platform_data	= &mini6410_lcd_power_data,
 };
 
+#define GPIO_KEYS_BUTTON(_code,_gpio,_desc,_type,_wakeup,_active_low,_debounce_interval)	\
+	{												\
+		.code				= _code,				\
+		.gpio				= _gpio,				\
+		.desc				= _desc,				\
+		.type				= _type,				\
+		.wakeup				= _wakeup,				\
+		.active_low			= _active_low,			\
+		.debounce_interval	= _debounce_interval,	\
+	}
+
+static struct gpio_keys_button mini6410_gpio_keys_tables[] = {
+	GPIO_KEYS_BUTTON(KEY_UP, S3C64XX_GPN(5), "UP", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_DOWN, S3C64XX_GPN(4), "DOWN", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_LEFT, S3C64XX_GPN(3), "LEFT", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_RIGHT, S3C64XX_GPN(2), "RIGHT", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_ENTER, S3C64XX_GPN(1), "ENTER", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_BACK, S3C64XX_GPN(0), "BACK", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_HOME, S3C64XX_GPL(11), "HOME", EV_KEY, 0, 1, 50),
+	GPIO_KEYS_BUTTON(KEY_MENU, S3C64XX_GPL(12), "MENU", EV_KEY, 0, 1, 50),
+};
+
+static struct gpio_keys_platform_data mini6410_gpio_keys_data = {
+	.buttons	= mini6410_gpio_keys_tables,
+	.nbuttons	= ARRAY_SIZE(mini6410_gpio_keys_tables),
+};
+
+static struct platform_device mini6410_device_gpio_keys = {
+	.name		= "gpio-keys",
+	.dev		= {
+		.platform_data	= &mini6410_gpio_keys_data,
+	},
+};
+
+#define GPIO_LED(_name, _default_trigger, _gpio, _active_low, _retain_state_suspend, _default_state)		\
+	{														\
+		.name					= _name,					\
+		.default_trigger		= _default_trigger,			\
+		.gpio					= _gpio,					\
+		.active_low				= _active_low,				\
+		.retain_state_suspended	= _retain_state_suspend,	\
+		.default_state			= _default_state,			\
+	}
+
+static struct gpio_led mini6410_gpio_leds[] = {
+	GPIO_LED("led-1", "none", S3C64XX_GPK(4), 1, 0, LEDS_GPIO_DEFSTATE_OFF),
+	GPIO_LED("led-2", "none", S3C64XX_GPK(5), 1, 0, LEDS_GPIO_DEFSTATE_OFF),
+	GPIO_LED("led-3", "none", S3C64XX_GPK(6), 1, 0, LEDS_GPIO_DEFSTATE_OFF),
+	GPIO_LED("led-4", "none", S3C64XX_GPK(7), 1, 0, LEDS_GPIO_DEFSTATE_OFF),
+};
+
+static struct gpio_led_platform_data mini6410_gpio_leds_pdata = {
+	.leds		= mini6410_gpio_leds,
+	.num_leds	= ARRAY_SIZE(mini6410_gpio_leds),
+};
+
+static struct platform_device mini6410_device_gpio_leds = {
+	.name		= "leds-gpio",
+	.dev		= {
+		.platform_data	= &mini6410_gpio_leds_pdata,
+	},
+};
+
 static struct platform_device *mini6410_devices[] __initdata = {
 	&mini6410_device_eth,
 	&s3c_device_hsmmc0,
@@ -220,6 +287,10 @@ static struct platform_device *mini6410_devices[] __initdata = {
 	&mini6410_lcd_powerdev,
 	&s3c_device_adc,
 	&s3c_device_ts,
+	&mini6410_device_gpio_keys,
+	&mini6410_device_gpio_leds,
+	&samsung_asoc_dma,
+	&s3c64xx_device_ac97,
 };
 
 static void __init mini6410_map_io(void)
@@ -333,6 +404,7 @@ static void __init mini6410_machine_init(void)
 	s3c_sdhci0_set_platdata(&sdhci0_pdata);
 	s3c_sdhci1_set_platdata(&sdhci1_pdata);
 	s3c_hsotg_set_platdata(&mini6410_hsotg_pdata);
+	s3c64xx_ac97_setup_gpio(0);
 
 	/* configure nCS1 width to 16 bits */
 
